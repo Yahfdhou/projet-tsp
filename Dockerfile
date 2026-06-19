@@ -1,0 +1,22 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    MPLBACKEND=Agg \
+    PIP_NO_CACHE_DIR=1
+
+COPY requirements.txt pyproject.toml README.md ./
+COPY src ./src
+COPY data ./data
+COPY experiments ./experiments
+COPY scripts ./scripts
+
+RUN pip install --upgrade pip \
+    && pip install -r requirements.txt \
+    && pip install -e . \
+    && mkdir -p results
+
+# Quick smoke test by default; override with docker compose or docker run
+CMD ["python", "experiments/run_comparison.py", "--quick"]

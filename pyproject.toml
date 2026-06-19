@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tsp-sba"
+version = "1.0.0"
+description = "Social-Based Algorithm (SBA) adapted for the Traveling Salesman Problem"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "pandas>=2.0.0",
+    "matplotlib>=3.7.0",
+]
+
+[project.scripts]
+tsp-sba-compare = "tsp_sba.experiments.runner:run_experiment"
+
+[tool.setuptools.packages.find]
+where = ["src"]

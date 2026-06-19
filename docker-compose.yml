@@ -1,0 +1,70 @@
+services:
+  comparison:
+    build: .
+    image: tsp-sba:latest
+    volumes:
+      - ./results:/app/results
+    command:
+      - python
+      - experiments/run_comparison.py
+      - --runs
+      - "30"
+      - --instances
+      - berlin52
+      - eil51
+      - kroA100
+      - --decades-multiplier
+      - "100"
+
+  comparison-quick:
+    build: .
+    image: tsp-sba:latest
+    volumes:
+      - ./results:/app/results
+    command:
+      - python
+      - experiments/run_comparison.py
+      - --quick
+
+  comparison-no-2opt:
+    build: .
+    image: tsp-sba:latest
+    volumes:
+      - ./results:/app/results
+    command:
+      - python
+      - experiments/run_comparison.py
+      - --runs
+      - "30"
+      - --instances
+      - berlin52
+      - eil51
+      - kroA100
+      - --decades-multiplier
+      - "100"
+      - --no-2-opt
+
+  single:
+    build: .
+    image: tsp-sba:latest
+    volumes:
+      - ./results:/app/results
+    command:
+      - python
+      - experiments/run_single.py
+      - --instance
+      - eil51
+      - --algorithm
+      - SBA
+      - --quick
+
+  plot:
+    build: .
+    image: tsp-sba:latest
+    volumes:
+      - ./results:/app/results
+    profiles:
+      - tools
+    entrypoint:
+      - python
+      - scripts/plot_results.py
