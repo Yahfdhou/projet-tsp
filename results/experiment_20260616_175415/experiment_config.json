@@ -1,0 +1,26 @@
+{
+  "timestamp": "20260616_175415",
+  "instances": [
+    "berlin52",
+    "eil51"
+  ],
+  "algorithms": [
+    "SBA",
+    "EA",
+    "ICA"
+  ],
+  "num_runs": 3,
+  "quick_mode": true,
+  "params": {
+    "pc": 0.75,
+    "pm": 0.050505,
+    "pe": 0.1,
+    "pi": 0.1,
+    "assimilation_coefficient": 2.0,
+    "num_imperialists": 8,
+    "num_countries": 22,
+    "people_per_country": 4,
+    "social_structure": "monarchy",
+    "decades_multiplier": 100
+  }
+}

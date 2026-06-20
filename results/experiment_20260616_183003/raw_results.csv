@@ -1,0 +1,10 @@
+instance,algorithm,run_id,best_cost,decades,seed
+berlin52,SBA,0,8980.0,50,384000
+berlin52,SBA,1,8854.0,50,384017
+berlin52,SBA,2,8920.0,50,384034
+berlin52,EA,0,8611.0,50,384094
+berlin52,EA,1,9082.0,50,384111
+berlin52,EA,2,8998.0,50,384128
+berlin52,ICA,0,8181.0,50,384049
+berlin52,ICA,1,8864.0,50,384066
+berlin52,ICA,2,9220.0,50,384083
