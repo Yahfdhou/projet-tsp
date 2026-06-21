@@ -3,95 +3,37 @@
 from __future__ import annotations
 
 import argparse
-import concurrent.futures
-import itertools
+import multiprocessing as mp
 import os
 import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime, timezone
+from itertools import product
 from pathlib import Path
 
 # Allow running without package install
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from parallel_worker import pin_single_thread, run_one
 from tsp_sba.config import ExperimentConfig, SBAParams
-from tsp_sba.experiments.runner import (
-    run_instance_algorithm,
-    run_single_task_row,
-    save_experiment_results,
-)
+from tsp_sba.experiments.runner import run_instance_algorithm, save_experiment_results
 
 
-def _run_parallel_run_task(payload: dict) -> dict:
-    """Worker: one independent run on a separate CPU core."""
-    instance = payload["instance"]
-    algorithm = payload["algorithm"]
-    run_id = payload["run_id"]
-    num_runs = payload["num_runs"]
-
-    print(
-        f"[core start] {algorithm}/{instance} run {run_id + 1}/{num_runs} "
-        f"(pid={os.getpid()})",
-        flush=True,
-    )
-
-    root = Path(payload["root"])
-    if str(root / "src") not in sys.path:
-        sys.path.insert(0, str(root / "src"))
-
-    params = SBAParams(**payload["params"])
-    config = ExperimentConfig(
-        instances=[payload["instance"]],
-        algorithms=[payload["algorithm"]],
-        params=params,
-        data_dir=payload["data_dir"],
-        results_dir=payload["results_dir"],
-    )
-    row = run_single_task_row(
-        payload["instance"],
-        payload["algorithm"],
-        config,
-        payload["run_id"],
-        quick=payload["quick"],
-    )
-    print(
-        f"[core done] {row['algorithm']}/{row['instance']} "
-        f"run {row['run_id'] + 1}/{num_runs} "
-        f"cost={row['best_cost']:.2f} (pid={os.getpid()})",
-        flush=True,
-    )
-    return row
-
-
-def _run_parallel_batch_task(payload: dict) -> list[dict]:
-    """Worker: all runs for one (instance, algorithm) pair."""
-    root = Path(payload["root"])
-    if str(root / "src") not in sys.path:
-        sys.path.insert(0, str(root / "src"))
-
-    params = SBAParams(**payload["params"])
-    config = ExperimentConfig(
-        instances=[payload["instance"]],
-        algorithms=[payload["algorithm"]],
-        params=params,
-        data_dir=payload["data_dir"],
-        results_dir=payload["results_dir"],
-    )
-    return run_instance_algorithm(
-        payload["instance"],
-        payload["algorithm"],
-        config,
-        quick=payload["quick"],
-        verbose=True,
-    )
-
-
-def _default_workers(requested: int) -> int:
-    available = os.cpu_count() or 1
-    return max(1, min(requested, available))
+def resolve_workers(requested: int, sequential: bool) -> int:
+    """Use exactly the requested worker count (default 4), unless --sequential."""
+    if sequential:
+        return 1
+    env_workers = os.environ.get("TSP_WORKERS")
+    if env_workers is not None:
+        return max(1, int(env_workers))
+    return max(1, requested)
 
 
 def main() -> None:
+    pin_single_thread()
+
     parser = argparse.ArgumentParser(
         description="SBA vs EA vs ICA on TSPLIB instances (Ramezani & Lotfi adaptation for TSP)"
     )
@@ -139,19 +81,13 @@ def main() -> None:
     parser.add_argument(
         "--workers",
         type=int,
-        default=4,
-        help="Number of CPU cores used in parallel (default: 4)",
+        default=int(os.environ.get("TSP_WORKERS", "4")),
+        help="Number of parallel worker processes (default: 4)",
     )
     parser.add_argument(
         "--sequential",
         action="store_true",
         help="Run on a single core (disable parallel processing)",
-    )
-    parser.add_argument(
-        "--parallel-level",
-        choices=["run", "batch"],
-        default="run",
-        help="run = distribute each run across cores (best); batch = per instance/algorithm",
     )
     args = parser.parse_args()
 
@@ -169,28 +105,24 @@ def main() -> None:
     )
 
     num_runs = 3 if args.quick else args.runs
-    workers = 1 if args.sequential else _default_workers(args.workers)
-    batch_tasks = list(itertools.product(args.instances, args.algorithms))
+    workers = resolve_workers(args.workers, args.sequential)
     run_tasks = [
         (instance, algorithm, run_id)
-        for instance, algorithm in batch_tasks
+        for instance, algorithm in product(args.instances, args.algorithms)
         for run_id in range(num_runs)
     ]
 
     print("=" * 60, flush=True)
-    print("TSP-SBA Experiment (Multi-Core v2)", flush=True)
-    print(f"  script: {Path(__file__).name}", flush=True)
+    print("TSP-SBA Experiment (Multi-Core v3)", flush=True)
+    print(f"  main pid: {os.getpid()}", flush=True)
+    print(f"  os.cpu_count(): {os.cpu_count()}", flush=True)
+    print(f"  parallel workers: {workers}", flush=True)
+    print(f"  OMP_NUM_THREADS: {os.environ.get('OMP_NUM_THREADS', 'not set')}", flush=True)
     print(f"  instances: {', '.join(args.instances)}", flush=True)
     print(f"  algorithms: {', '.join(args.algorithms)}", flush=True)
-    print(f"  runs: {num_runs}", flush=True)
-    print(f"  decades_multiplier: {args.decades_multiplier}", flush=True)
+    print(f"  runs per algo: {num_runs}", flush=True)
+    print(f"  total parallel tasks: {len(run_tasks)}", flush=True)
     print(f"  2-opt: {'off' if args.no_2_opt else 'on'}", flush=True)
-    print(f"  CPU cores used: {workers}", flush=True)
-    print(f"  parallel level: {args.parallel_level}", flush=True)
-    if args.parallel_level == "run":
-        print(f"  total tasks: {len(run_tasks)} runs", flush=True)
-    else:
-        print(f"  total tasks: {len(batch_tasks)} (instance x algorithm)", flush=True)
     print("=" * 60, flush=True)
 
     results_dir = Path(config.results_dir)
@@ -213,67 +145,51 @@ def main() -> None:
         "social_structure": params.social_structure,
     }
 
+    payloads = [
+        {
+            "root": str(ROOT),
+            "instance": instance,
+            "algorithm": algorithm,
+            "run_id": run_id,
+            "num_runs": num_runs,
+            "params": param_fields,
+            "data_dir": args.data_dir,
+            "results_dir": args.results_dir,
+            "quick": args.quick,
+        }
+        for instance, algorithm, run_id in run_tasks
+    ]
+
     all_rows: list[dict] = []
 
     if workers == 1:
-        for instance, algorithm in batch_tasks:
+        print("SEQUENTIAL mode (1 CPU)", flush=True)
+        for instance, algorithm in product(args.instances, args.algorithms):
             rows = run_instance_algorithm(
                 instance, algorithm, config, quick=args.quick, verbose=True
             )
             all_rows.extend(rows)
-    elif args.parallel_level == "batch":
-        print(
-            f"Distributing {len(batch_tasks)} batch tasks across {workers} CPU cores...",
-            flush=True,
-        )
-        payloads = [
-            {
-                "root": str(ROOT),
-                "instance": instance,
-                "algorithm": algorithm,
-                "params": param_fields,
-                "data_dir": args.data_dir,
-                "results_dir": args.results_dir,
-                "quick": args.quick,
-            }
-            for instance, algorithm in batch_tasks
-        ]
-        with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
-            futures = {
-                executor.submit(_run_parallel_batch_task, payload): (
-                    payload["instance"],
-                    payload["algorithm"],
-                )
-                for payload in payloads
-            }
-            for future in concurrent.futures.as_completed(futures):
-                instance, algorithm = futures[future]
-                rows = future.result()
-                all_rows.extend(rows)
-                print(f"[done] {algorithm} on {instance} ({len(rows)} runs)", flush=True)
     else:
         print(
-            f"Distributing {len(run_tasks)} runs across {workers} CPU cores...",
+            f"PARALLEL mode: {workers} worker processes will run AT THE SAME TIME",
             flush=True,
         )
-        payloads = [
-            {
-                "root": str(ROOT),
-                "instance": instance,
-                "algorithm": algorithm,
-                "run_id": run_id,
-                "num_runs": num_runs,
-                "params": param_fields,
-                "data_dir": args.data_dir,
-                "results_dir": args.results_dir,
-                "quick": args.quick,
-            }
-            for instance, algorithm, run_id in run_tasks
-        ]
-        with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
-            futures = [executor.submit(_run_parallel_run_task, payload) for payload in payloads]
-            for future in concurrent.futures.as_completed(futures):
+        print(f"Submitting {len(payloads)} tasks...", flush=True)
+
+        # spawn = safe on Windows and Linux/Docker
+        ctx = mp.get_context("spawn")
+        with ProcessPoolExecutor(
+            max_workers=workers,
+            mp_context=ctx,
+            initializer=pin_single_thread,
+        ) as executor:
+            futures = [executor.submit(run_one, p) for p in payloads]
+            done = 0
+            for future in as_completed(futures):
                 all_rows.append(future.result())
+                done += 1
+                if done % workers == 0 or done == len(futures):
+                    print(f"Progress: {done}/{len(futures)} runs completed", flush=True)
 
     summary_df, wilcoxon_df = save_experiment_results(
         all_rows, config, args.quick, run_dir, parallel_workers=workers

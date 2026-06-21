@@ -30,19 +30,21 @@ mkdir -p "$PROJECT_DIR/results"
 sudo docker run -d \
   --name "$CONTAINER_NAME" \
   --cpus 4 \
+  --cpuset-cpus="0-3" \
+  -e TSP_WORKERS=4 \
+  -e OMP_NUM_THREADS=1 \
   -v "$PROJECT_DIR/results:/app/results" \
   "$IMAGE_NAME" \
   python -u experiments/run_comparison.py \
     --runs 30 \
     --instances berlin52 eil51 kroA100 \
     --decades-multiplier 100 \
-    --workers 4 \
-    --parallel-level run
+    --workers 4
 
 echo ""
 echo "=== Verify parallel mode in logs ==="
-echo "  You MUST see: 'Multi-Core v2' and 'Distributing 270 runs'"
-echo "  If you see 'Running SBA...' only → OLD code still running!"
+echo "  You MUST see: 'Multi-Core v3' and 'PARALLEL mode: 4 worker processes'"
+echo "  You MUST see 4 different pids in [worker pid=...] START lines"
 echo ""
 echo "Follow logs (live):"
 echo "  sudo docker logs -f $CONTAINER_NAME"
