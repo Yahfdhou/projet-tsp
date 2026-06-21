@@ -16,6 +16,8 @@ services:
       - kroA100
       - --decades-multiplier
       - "100"
+      - --workers
+      - "4"
 
   comparison-quick:
     build: .
@@ -45,6 +47,8 @@ services:
       - kroA100
       - --decades-multiplier
       - "100"
+      - --workers
+      - "4"
       - --no-2-opt
 
   single:

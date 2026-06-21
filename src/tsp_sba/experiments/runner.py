@@ -53,6 +53,33 @@ def run_single_algorithm(
     return algo.run(rng=rng, max_decades=max_decades, run_id=run_id)
 
 
+def make_run_seed(instance_name: str, algorithm_name: str, run_id: int) -> int:
+    """Reproducible seed for one independent run."""
+    return (hash(instance_name) % 10000) * 1000 + run_id * 17 + hash(algorithm_name) % 100
+
+
+def run_single_task_row(
+    instance_name: str,
+    algorithm_name: str,
+    config: ExperimentConfig,
+    run_id: int,
+    quick: bool = False,
+) -> dict:
+    """Execute one run and return a single result row."""
+    seed = make_run_seed(instance_name, algorithm_name, run_id)
+    result = run_single_algorithm(
+        instance_name, algorithm_name, config, run_id, seed, quick=quick
+    )
+    return {
+        "instance": instance_name,
+        "algorithm": algorithm_name,
+        "run_id": run_id,
+        "best_cost": result.best_cost,
+        "decades": result.decades,
+        "seed": seed,
+    }
+
+
 def run_instance_algorithm(
     instance_name: str,
     algorithm_name: str,
@@ -74,7 +101,7 @@ def run_instance_algorithm(
                 end=" ",
                 flush=True,
             )
-        seed = (hash(instance_name) % 10000) * 1000 + run_id * 17 + hash(algorithm_name) % 100
+        seed = make_run_seed(instance_name, algorithm_name, run_id)
         result = run_single_algorithm(
             instance_name, algorithm_name, config, run_id, seed, quick=quick
         )
@@ -114,14 +141,17 @@ def save_experiment_results(
     num_runs = 3 if quick else config.params.num_runs
 
     df = pd.DataFrame(all_rows)
+    df = df.sort_values(["instance", "algorithm", "run_id"]).reset_index(drop=True)
     df.to_csv(run_dir / "raw_results.csv", index=False)
 
     results_by_instance: dict[str, dict[str, list[float]]] = {}
     for instance_name in config.instances:
         results_by_instance[instance_name] = {alg: [] for alg in config.algorithms}
 
-    for row in all_rows:
-        results_by_instance[row["instance"]][row["algorithm"]].append(row["best_cost"])
+    for instance_name in config.instances:
+        for alg in config.algorithms:
+            alg_rows = df[(df["instance"] == instance_name) & (df["algorithm"] == alg)]
+            results_by_instance[instance_name][alg] = alg_rows["best_cost"].tolist()
 
     summary_rows = []
     wilcoxon_rows = []

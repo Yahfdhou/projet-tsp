@@ -19,4 +19,4 @@ RUN pip install --upgrade pip \
     && mkdir -p results
 
 # Quick smoke test by default; override with docker compose or docker run
-CMD ["python", "-u", "experiments/run_comparison.py", "--quick"]
+CMD ["python", "-u", "experiments/run_comparison.py", "--quick", "--workers", "4"]
