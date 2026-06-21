@@ -16,9 +16,10 @@ services:
       - eil51
       - kroA100
       - --decades-multiplier
-      - "100"
+      - "20"
       - --workers
       - "16"
+      - --fresh
 
   comparison-quick:
     build: .
