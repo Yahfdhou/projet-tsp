@@ -27,7 +27,19 @@ from tsp_sba.experiments.runner import (
 )
 
 
-def resolve_workers(requested: int, sequential: bool) -> int:
+def resolve_decades_multiplier(
+    explicit: int | None,
+    use_two_opt: bool,
+    quick: bool,
+) -> tuple[int, str]:
+    """Pick decades multiplier: paper ×100 without 2-opt, TSP ×20 with 2-opt."""
+    if explicit is not None:
+        return explicit, "manual (--decades-multiplier)"
+    if quick:
+        return 100, "quick mode (decades divided by 20 in runner)"
+    if use_two_opt:
+        return 20, "TSP default with 2-opt (paper uses ×100 on continuous functions only)"
+    return 100, "paper default without 2-opt (×100)"
     """Always use the requested worker count (default 4) unless --sequential."""
     if sequential:
         return 1
@@ -69,8 +81,8 @@ def main() -> None:
     parser.add_argument(
         "--decades-multiplier",
         type=int,
-        default=100,
-        help="max_decades = n_cities * multiplier",
+        default=None,
+        help="max_decades = n_cities × multiplier (default: 20 with 2-opt, 100 without)",
     )
     parser.add_argument(
         "--data-dir",
@@ -111,12 +123,22 @@ def main() -> None:
         default="",
         help="Resume a partial experiment folder (e.g. results/experiment_20260621_175659)",
     )
+    parser.add_argument(
+        "--fresh",
+        action="store_true",
+        help="Start a new experiment folder (do not auto-resume old partial runs)",
+    )
     args = parser.parse_args()
+
+    use_two_opt = not args.no_2_opt
+    decades_multiplier, decades_reason = resolve_decades_multiplier(
+        args.decades_multiplier, use_two_opt, args.quick
+    )
 
     params = SBAParams(
         num_runs=args.runs,
-        decades_multiplier=args.decades_multiplier,
-        use_two_opt=not args.no_2_opt,
+        decades_multiplier=decades_multiplier,
+        use_two_opt=use_two_opt,
     )
     config = ExperimentConfig(
         instances=args.instances,
@@ -142,6 +164,8 @@ def main() -> None:
         run_dir = Path(args.resume)
         if not run_dir.exists():
             run_dir = results_dir / Path(args.resume).name
+    elif args.fresh:
+        run_dir = None
     else:
         run_dir = find_latest_partial_run(results_dir, total_tasks)
 
@@ -157,7 +181,7 @@ def main() -> None:
     completed = completed_task_keys(existing_rows)
 
     print("=" * 60, flush=True)
-    print("TSP-SBA Experiment (Multi-Core v4)", flush=True)
+    print("TSP-SBA Experiment (Multi-Core v5 — reduced decades for TSP)", flush=True)
     print(f"  main pid: {os.getpid()}", flush=True)
     print(f"  os.cpu_count(): {os.cpu_count()}", flush=True)
     print(f"  parallel workers: {workers}", flush=True)
@@ -166,9 +190,9 @@ def main() -> None:
     print(f"  instances: {', '.join(args.instances)}", flush=True)
     print(f"  algorithms: {', '.join(args.algorithms)}", flush=True)
     print(f"  runs per algo: {num_runs}", flush=True)
-    print(f"  decades_multiplier: {args.decades_multiplier}", flush=True)
+    print(f"  decades_multiplier: {decades_multiplier} ({decades_reason})", flush=True)
     print(
-        f"  max_decades (= n_villes × {args.decades_multiplier}):",
+        f"  max_decades (= n_villes × {decades_multiplier}):",
         flush=True,
     )
     for inst in args.instances:
@@ -176,12 +200,12 @@ def main() -> None:
             from tsp_sba.tsp.instance import load_instance_by_name
 
             n = load_instance_by_name(args.data_dir, inst).n_cities
-            max_dec = n * args.decades_multiplier
+            max_dec = n * decades_multiplier
             if args.quick:
                 max_dec = max(50, max_dec // 20)
             print(f"    {inst}: {n} villes → {max_dec} decades", flush=True)
         except Exception:
-            print(f"    {inst}: n × {args.decades_multiplier}", flush=True)
+            print(f"    {inst}: n × {decades_multiplier}", flush=True)
     print(f"  total tasks: {total_tasks} | remaining: {total_tasks - len(completed)}", flush=True)
     print(f"  2-opt: {'off' if args.no_2_opt else 'on'}", flush=True)
     print("=" * 60, flush=True)

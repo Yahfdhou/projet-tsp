@@ -31,8 +31,14 @@ class SBAParams:
     # Social structure (Monarchy achieved best results in the paper)
     social_structure: SocialStructure = "monarchy"
 
-    # Termination: decades = full EA+ICA cycles (paper uses dimension-dependent scaling)
-    decades_multiplier: int = 100  # max_decades = n_cities * decades_multiplier
+    # Termination: decades = full EA+ICA cycles
+    # Paper (continuous functions): n × 100
+    # TSP + 2-opt: n × 20 is enough (2-opt compensates; ×100 is impractically slow)
+    decades_multiplier: int = 100  # overridden at CLI when use_two_opt (see run_comparison)
+
+    # TSP-adapted defaults (Ramezani paper uses 100 on continuous benchmarks)
+    paper_decades_multiplier: int = 100
+    tsp_2opt_decades_multiplier: int = 20
 
     # TSP local search (2-opt) — applied after offspring/assimilation when enabled
     use_two_opt: bool = True

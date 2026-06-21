@@ -38,6 +38,7 @@ services:
     build: .
     image: tsp-sba:latest
     cpus: 16
+    volumes:
       - ./results:/app/results
     command:
       - python

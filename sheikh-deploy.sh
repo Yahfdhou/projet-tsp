@@ -8,6 +8,8 @@ PROJECT_DIR="$HOME/projet-tsp"
 IMAGE_NAME="tsp-sba:latest"
 CONTAINER_NAME="tsp-sba-run"
 WORKERS=16
+# TSP + 2-opt: ×20 decades (paper ×100 is for continuous functions, too slow for TSP)
+DECADES_MULTIPLIER=20
 
 echo "=== 1. Go to project directory ==="
 cd "$PROJECT_DIR"
@@ -57,8 +59,9 @@ sudo docker run -d \
   python -u experiments/run_comparison.py \
     --runs 30 \
     --instances berlin52 eil51 kroA100 \
-    --decades-multiplier 100 \
-    --workers "$WORKERS"
+    --decades-multiplier "$DECADES_MULTIPLIER" \
+    --workers "$WORKERS" \
+    --fresh
 
 echo ""
 echo "=== Done! $WORKERS workers on $WORKERS vCPUs ==="
