@@ -74,6 +74,16 @@ def main() -> None:
         results_dir=args.results_dir,
     )
 
+    num_runs = 3 if args.quick else args.runs
+    print("=" * 60, flush=True)
+    print("TSP-SBA Experiment", flush=True)
+    print(f"  instances: {', '.join(args.instances)}", flush=True)
+    print(f"  algorithms: {', '.join(args.algorithms)}", flush=True)
+    print(f"  runs: {num_runs}", flush=True)
+    print(f"  decades_multiplier: {args.decades_multiplier}", flush=True)
+    print(f"  2-opt: {'off' if args.no_2_opt else 'on'}", flush=True)
+    print("=" * 60, flush=True)
+
     run_experiment(config, quick=args.quick)
 
 

@@ -80,9 +80,15 @@ def run_experiment(
 
         for alg in config.algorithms:
             if verbose:
-                print(f"  Running {alg}...", end=" ", flush=True)
+                print(f"  Running {alg}...", flush=True)
 
             for run_id in range(num_runs):
+                if verbose:
+                    print(
+                        f"    run {run_id + 1}/{num_runs}...",
+                        end=" ",
+                        flush=True,
+                    )
                 seed = (hash(instance_name) % 10000) * 1000 + run_id * 17 + hash(alg) % 100
                 result = run_single_algorithm(
                     instance_name, alg, config, run_id, seed, quick=quick
@@ -98,10 +104,15 @@ def run_experiment(
                         "seed": seed,
                     }
                 )
+                if verbose:
+                    print(f"cost={result.best_cost:.2f}", flush=True)
 
             costs = results_by_instance[instance_name][alg]
             if verbose:
-                print(f"mean={np.mean(costs):.2f}, best={np.min(costs):.2f}")
+                print(
+                    f"  {alg} done: mean={np.mean(costs):.2f}, best={np.min(costs):.2f}",
+                    flush=True,
+                )
 
     # Save raw results
     df = pd.DataFrame(all_rows)

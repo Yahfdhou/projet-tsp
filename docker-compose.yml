@@ -6,6 +6,7 @@ services:
       - ./results:/app/results
     command:
       - python
+      - -u
       - experiments/run_comparison.py
       - --runs
       - "30"
@@ -23,6 +24,7 @@ services:
       - ./results:/app/results
     command:
       - python
+      - -u
       - experiments/run_comparison.py
       - --quick
 
@@ -33,6 +35,7 @@ services:
       - ./results:/app/results
     command:
       - python
+      - -u
       - experiments/run_comparison.py
       - --runs
       - "30"

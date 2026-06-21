@@ -31,7 +31,7 @@ sudo docker run -d \
   --name "$CONTAINER_NAME" \
   -v "$PROJECT_DIR/results:/app/results" \
   "$IMAGE_NAME" \
-  python experiments/run_comparison.py \
+  python -u experiments/run_comparison.py \
     --runs 30 \
     --instances berlin52 eil51 kroA100 \
     --decades-multiplier 100
