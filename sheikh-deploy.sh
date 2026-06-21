@@ -34,7 +34,8 @@ sudo docker run -d \
   python -u experiments/run_comparison.py \
     --runs 30 \
     --instances berlin52 eil51 kroA100 \
-    --decades-multiplier 100
+    --decades-multiplier 100 \
+    --workers 4
 
 echo ""
 echo "=== Done! Container started in background ==="
