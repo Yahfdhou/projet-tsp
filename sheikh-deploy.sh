@@ -21,24 +21,28 @@ echo "=== 4. Stop and remove old container (if exists) ==="
 sudo docker stop "$CONTAINER_NAME" 2>/dev/null || true
 sudo docker rm "$CONTAINER_NAME" 2>/dev/null || true
 
-echo "=== 5. Build Docker image ==="
-sudo docker build -t "$IMAGE_NAME" .
+echo "=== 5. Build Docker image (no cache) ==="
+sudo docker build --no-cache -t "$IMAGE_NAME" .
 
 echo "=== 6. Run container in background (-d) ==="
 mkdir -p "$PROJECT_DIR/results"
 
 sudo docker run -d \
   --name "$CONTAINER_NAME" \
+  --cpus 4 \
   -v "$PROJECT_DIR/results:/app/results" \
   "$IMAGE_NAME" \
   python -u experiments/run_comparison.py \
     --runs 30 \
     --instances berlin52 eil51 kroA100 \
     --decades-multiplier 100 \
-    --workers 4
+    --workers 4 \
+    --parallel-level run
 
 echo ""
-echo "=== Done! Container started in background ==="
+echo "=== Verify parallel mode in logs ==="
+echo "  You MUST see: 'Multi-Core v2' and 'Distributing 270 runs'"
+echo "  If you see 'Running SBA...' only → OLD code still running!"
 echo ""
 echo "Follow logs (live):"
 echo "  sudo docker logs -f $CONTAINER_NAME"

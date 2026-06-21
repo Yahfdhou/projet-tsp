@@ -2,6 +2,7 @@ services:
   comparison:
     build: .
     image: tsp-sba:latest
+    cpus: 4
     volumes:
       - ./results:/app/results
     command:

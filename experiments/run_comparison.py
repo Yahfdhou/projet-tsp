@@ -24,6 +24,17 @@ from tsp_sba.experiments.runner import (
 
 def _run_parallel_run_task(payload: dict) -> dict:
     """Worker: one independent run on a separate CPU core."""
+    instance = payload["instance"]
+    algorithm = payload["algorithm"]
+    run_id = payload["run_id"]
+    num_runs = payload["num_runs"]
+
+    print(
+        f"[core start] {algorithm}/{instance} run {run_id + 1}/{num_runs} "
+        f"(pid={os.getpid()})",
+        flush=True,
+    )
+
     root = Path(payload["root"])
     if str(root / "src") not in sys.path:
         sys.path.insert(0, str(root / "src"))
@@ -44,9 +55,9 @@ def _run_parallel_run_task(payload: dict) -> dict:
         quick=payload["quick"],
     )
     print(
-        f"[core] {row['algorithm']}/{row['instance']} "
-        f"run {row['run_id'] + 1}/{payload['num_runs']} "
-        f"cost={row['best_cost']:.2f}",
+        f"[core done] {row['algorithm']}/{row['instance']} "
+        f"run {row['run_id'] + 1}/{num_runs} "
+        f"cost={row['best_cost']:.2f} (pid={os.getpid()})",
         flush=True,
     )
     return row
@@ -167,7 +178,8 @@ def main() -> None:
     ]
 
     print("=" * 60, flush=True)
-    print("TSP-SBA Experiment (Multi-Core)", flush=True)
+    print("TSP-SBA Experiment (Multi-Core v2)", flush=True)
+    print(f"  script: {Path(__file__).name}", flush=True)
     print(f"  instances: {', '.join(args.instances)}", flush=True)
     print(f"  algorithms: {', '.join(args.algorithms)}", flush=True)
     print(f"  runs: {num_runs}", flush=True)
