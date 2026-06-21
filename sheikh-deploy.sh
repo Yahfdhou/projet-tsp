@@ -1,5 +1,5 @@
 #!/bin/bash
-# Deploy TSP-SBA on Sheikh server (16 workers, 16 vCPUs)
+# Deploy TSP-SBA on Sheikh server (2 workers, 2 vCPUs)
 # Usage: bash sheikh-deploy.sh
 
 set -e
@@ -7,7 +7,7 @@ set -e
 PROJECT_DIR="$HOME/projet-tsp"
 IMAGE_NAME="tsp-sba:latest"
 CONTAINER_NAME="tsp-sba-run"
-WORKERS=16
+WORKERS=2
 # TSP + 2-opt: ×20 decades (paper ×100 is for continuous functions, too slow for TSP)
 DECADES_MULTIPLIER=20
 
@@ -20,7 +20,7 @@ git pull origin main
 echo "=== 3. Add swap (prevents OOM with $WORKERS workers) ==="
 if ! swapon --show | grep -q '/swapfile'; then
   if [ ! -f /swapfile ]; then
-    sudo fallocate -l 8G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=8192
+    sudo fallocate -l 4G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
     sudo chmod 600 /swapfile
     sudo mkswap /swapfile
   fi
@@ -69,7 +69,7 @@ echo ""
 echo "Follow logs:"
 echo "  sudo docker logs -f $CONTAINER_NAME"
 echo ""
-echo "Check CPUs (all $WORKERS should be busy):"
+echo "Check CPUs (both should be busy):"
 echo "  sudo docker stats $CONTAINER_NAME"
 echo ""
 echo "Check container running:"

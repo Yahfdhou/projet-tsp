@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     MPLBACKEND=Agg \
     PIP_NO_CACHE_DIR=1 \
-    TSP_WORKERS=16 \
+    TSP_WORKERS=2 \
     OMP_NUM_THREADS=1 \
     MKL_NUM_THREADS=1 \
     OPENBLAS_NUM_THREADS=1 \
@@ -24,4 +24,4 @@ RUN pip install --upgrade pip \
     && mkdir -p results
 
 # Quick smoke test by default; override with docker compose or docker run
-CMD ["python", "-u", "experiments/run_comparison.py", "--quick", "--workers", "16"]
+CMD ["python", "-u", "experiments/run_comparison.py", "--quick", "--workers", "2"]

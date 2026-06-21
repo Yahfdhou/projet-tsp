@@ -112,8 +112,8 @@ def main() -> None:
     parser.add_argument(
         "--workers",
         type=int,
-        default=int(os.environ.get("TSP_WORKERS", "16")),
-        help="Number of parallel worker processes (default: 16)",
+        default=int(os.environ.get("TSP_WORKERS", "2")),
+        help="Number of parallel worker processes (default: 2)",
     )
     parser.add_argument(
         "--sequential",
