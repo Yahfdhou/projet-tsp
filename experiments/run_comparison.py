@@ -97,8 +97,8 @@ def main() -> None:
     parser.add_argument(
         "--workers",
         type=int,
-        default=int(os.environ.get("TSP_WORKERS", "4")),
-        help="Number of parallel worker processes (default: 4)",
+        default=int(os.environ.get("TSP_WORKERS", "16")),
+        help="Number of parallel worker processes (default: 16)",
     )
     parser.add_argument(
         "--sequential",
@@ -160,12 +160,28 @@ def main() -> None:
     print("TSP-SBA Experiment (Multi-Core v4)", flush=True)
     print(f"  main pid: {os.getpid()}", flush=True)
     print(f"  os.cpu_count(): {os.cpu_count()}", flush=True)
-    print(f"  parallel workers: {workers} (fixed — always 4 unless --sequential)", flush=True)
+    print(f"  parallel workers: {workers}", flush=True)
     print(f"  OMP_NUM_THREADS: {os.environ.get('OMP_NUM_THREADS', '1')}", flush=True)
     print(f"  output: {run_dir}", flush=True)
     print(f"  instances: {', '.join(args.instances)}", flush=True)
     print(f"  algorithms: {', '.join(args.algorithms)}", flush=True)
     print(f"  runs per algo: {num_runs}", flush=True)
+    print(f"  decades_multiplier: {args.decades_multiplier}", flush=True)
+    print(
+        f"  max_decades (= n_villes × {args.decades_multiplier}):",
+        flush=True,
+    )
+    for inst in args.instances:
+        try:
+            from tsp_sba.tsp.instance import load_instance_by_name
+
+            n = load_instance_by_name(args.data_dir, inst).n_cities
+            max_dec = n * args.decades_multiplier
+            if args.quick:
+                max_dec = max(50, max_dec // 20)
+            print(f"    {inst}: {n} villes → {max_dec} decades", flush=True)
+        except Exception:
+            print(f"    {inst}: n × {args.decades_multiplier}", flush=True)
     print(f"  total tasks: {total_tasks} | remaining: {total_tasks - len(completed)}", flush=True)
     print(f"  2-opt: {'off' if args.no_2_opt else 'on'}", flush=True)
     print("=" * 60, flush=True)
@@ -217,7 +233,7 @@ def main() -> None:
                     all_rows.append(row)
     else:
         print(
-            f"PARALLEL mode: {workers} workers run AT THE SAME TIME on 4 CPUs",
+            f"PARALLEL mode: {workers} workers run AT THE SAME TIME on {workers} vCPUs",
             flush=True,
         )
         print(f"Submitting {len(payloads)} remaining tasks...", flush=True)

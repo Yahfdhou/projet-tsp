@@ -2,7 +2,7 @@ services:
   comparison:
     build: .
     image: tsp-sba:latest
-    cpus: 4
+    cpus: 16
     volumes:
       - ./results:/app/results
     command:
@@ -18,11 +18,12 @@ services:
       - --decades-multiplier
       - "100"
       - --workers
-      - "4"
+      - "16"
 
   comparison-quick:
     build: .
     image: tsp-sba:latest
+    cpus: 16
     volumes:
       - ./results:/app/results
     command:
@@ -30,11 +31,13 @@ services:
       - -u
       - experiments/run_comparison.py
       - --quick
+      - --workers
+      - "16"
 
   comparison-no-2opt:
     build: .
     image: tsp-sba:latest
-    volumes:
+    cpus: 16
       - ./results:/app/results
     command:
       - python
@@ -49,7 +52,7 @@ services:
       - --decades-multiplier
       - "100"
       - --workers
-      - "4"
+      - "16"
       - --no-2-opt
 
   single:
