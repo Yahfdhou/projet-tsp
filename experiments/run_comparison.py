@@ -18,17 +18,33 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from parallel_worker import pin_single_thread, run_one
 from tsp_sba.config import ExperimentConfig, SBAParams
-from tsp_sba.experiments.runner import run_instance_algorithm, save_experiment_results
+from tsp_sba.experiments.runner import (
+    append_checkpoint_row,
+    completed_task_keys,
+    load_checkpoint_rows,
+    run_instance_algorithm,
+    save_experiment_results,
+)
 
 
 def resolve_workers(requested: int, sequential: bool) -> int:
-    """Use exactly the requested worker count (default 4), unless --sequential."""
+    """Always use the requested worker count (default 4) unless --sequential."""
     if sequential:
         return 1
     env_workers = os.environ.get("TSP_WORKERS")
     if env_workers is not None:
         return max(1, int(env_workers))
     return max(1, requested)
+
+
+def find_latest_partial_run(results_dir: Path, expected_tasks: int) -> Path | None:
+    """Find the most recent experiment folder that is not finished yet."""
+    candidates = sorted(results_dir.glob("experiment_*"), reverse=True)
+    for run_dir in candidates:
+        rows = load_checkpoint_rows(run_dir)
+        if 0 < len(rows) < expected_tasks:
+            return run_dir
+    return None
 
 
 def main() -> None:
@@ -89,6 +105,12 @@ def main() -> None:
         action="store_true",
         help="Run on a single core (disable parallel processing)",
     )
+    parser.add_argument(
+        "--resume",
+        type=str,
+        default="",
+        help="Resume a partial experiment folder (e.g. results/experiment_20260621_175659)",
+    )
     args = parser.parse_args()
 
     params = SBAParams(
@@ -106,29 +128,47 @@ def main() -> None:
 
     num_runs = 3 if args.quick else args.runs
     workers = resolve_workers(args.workers, args.sequential)
+    total_tasks = len(args.instances) * len(args.algorithms) * num_runs
     run_tasks = [
         (instance, algorithm, run_id)
         for instance, algorithm in product(args.instances, args.algorithms)
         for run_id in range(num_runs)
     ]
 
+    results_dir = Path(config.results_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.resume:
+        run_dir = Path(args.resume)
+        if not run_dir.exists():
+            run_dir = results_dir / Path(args.resume).name
+    else:
+        run_dir = find_latest_partial_run(results_dir, total_tasks)
+
+    if run_dir is None:
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        run_dir = results_dir / f"experiment_{timestamp}"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        existing_rows: list[dict] = []
+    else:
+        existing_rows = load_checkpoint_rows(run_dir)
+        print(f"Resuming experiment: {run_dir} ({len(existing_rows)}/{total_tasks} done)", flush=True)
+
+    completed = completed_task_keys(existing_rows)
+
     print("=" * 60, flush=True)
-    print("TSP-SBA Experiment (Multi-Core v3)", flush=True)
+    print("TSP-SBA Experiment (Multi-Core v4)", flush=True)
     print(f"  main pid: {os.getpid()}", flush=True)
     print(f"  os.cpu_count(): {os.cpu_count()}", flush=True)
-    print(f"  parallel workers: {workers}", flush=True)
-    print(f"  OMP_NUM_THREADS: {os.environ.get('OMP_NUM_THREADS', 'not set')}", flush=True)
+    print(f"  parallel workers: {workers} (fixed — always 4 unless --sequential)", flush=True)
+    print(f"  OMP_NUM_THREADS: {os.environ.get('OMP_NUM_THREADS', '1')}", flush=True)
+    print(f"  output: {run_dir}", flush=True)
     print(f"  instances: {', '.join(args.instances)}", flush=True)
     print(f"  algorithms: {', '.join(args.algorithms)}", flush=True)
     print(f"  runs per algo: {num_runs}", flush=True)
-    print(f"  total parallel tasks: {len(run_tasks)}", flush=True)
+    print(f"  total tasks: {total_tasks} | remaining: {total_tasks - len(completed)}", flush=True)
     print(f"  2-opt: {'off' if args.no_2_opt else 'on'}", flush=True)
     print("=" * 60, flush=True)
-
-    results_dir = Path(config.results_dir)
-    results_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    run_dir = results_dir / f"experiment_{timestamp}"
 
     param_fields = {
         "num_runs": params.num_runs,
@@ -158,38 +198,46 @@ def main() -> None:
             "quick": args.quick,
         }
         for instance, algorithm, run_id in run_tasks
+        if (instance, algorithm, run_id) not in completed
     ]
 
-    all_rows: list[dict] = []
+    all_rows = list(existing_rows)
 
-    if workers == 1:
+    if not payloads:
+        print("All tasks already completed.", flush=True)
+    elif workers == 1:
         print("SEQUENTIAL mode (1 CPU)", flush=True)
         for instance, algorithm in product(args.instances, args.algorithms):
             rows = run_instance_algorithm(
                 instance, algorithm, config, quick=args.quick, verbose=True
             )
-            all_rows.extend(rows)
+            for row in rows:
+                if (row["instance"], row["algorithm"], int(row["run_id"])) not in completed:
+                    append_checkpoint_row(run_dir, row)
+                    all_rows.append(row)
     else:
         print(
-            f"PARALLEL mode: {workers} worker processes will run AT THE SAME TIME",
+            f"PARALLEL mode: {workers} workers run AT THE SAME TIME on 4 CPUs",
             flush=True,
         )
-        print(f"Submitting {len(payloads)} tasks...", flush=True)
+        print(f"Submitting {len(payloads)} remaining tasks...", flush=True)
 
-        # spawn = safe on Windows and Linux/Docker
         ctx = mp.get_context("spawn")
         with ProcessPoolExecutor(
             max_workers=workers,
             mp_context=ctx,
             initializer=pin_single_thread,
+            max_tasks_per_child=1,
         ) as executor:
             futures = [executor.submit(run_one, p) for p in payloads]
-            done = 0
+            done = len(completed)
             for future in as_completed(futures):
-                all_rows.append(future.result())
+                row = future.result()
+                append_checkpoint_row(run_dir, row)
+                all_rows.append(row)
                 done += 1
-                if done % workers == 0 or done == len(futures):
-                    print(f"Progress: {done}/{len(futures)} runs completed", flush=True)
+                if done % workers == 0 or done == total_tasks:
+                    print(f"Progress: {done}/{total_tasks} runs saved", flush=True)
 
     summary_df, wilcoxon_df = save_experiment_results(
         all_rows, config, args.quick, run_dir, parallel_workers=workers

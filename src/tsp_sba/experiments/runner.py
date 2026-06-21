@@ -129,6 +129,33 @@ def run_instance_algorithm(
     return rows
 
 
+def load_checkpoint_rows(run_dir: Path) -> list[dict]:
+    """Load rows already saved in a partial experiment."""
+    path = run_dir / "raw_results.csv"
+    if not path.exists():
+        return []
+    df = pd.read_csv(path)
+    return df.to_dict("records")
+
+
+def completed_task_keys(rows: list[dict]) -> set[tuple[str, str, int]]:
+    return {
+        (str(r["instance"]), str(r["algorithm"]), int(r["run_id"]))
+        for r in rows
+    }
+
+
+def append_checkpoint_row(run_dir: Path, row: dict) -> None:
+    """Append one finished run to raw_results.csv (safe for long parallel jobs)."""
+    run_dir.mkdir(parents=True, exist_ok=True)
+    path = run_dir / "raw_results.csv"
+    df = pd.DataFrame([row])
+    if path.exists():
+        df.to_csv(path, mode="a", header=False, index=False)
+    else:
+        df.to_csv(path, index=False)
+
+
 def save_experiment_results(
     all_rows: list[dict],
     config: ExperimentConfig,
