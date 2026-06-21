@@ -40,7 +40,10 @@ def resolve_decades_multiplier(
     if use_two_opt:
         return 20, "TSP default with 2-opt (paper uses ×100 on continuous functions only)"
     return 100, "paper default without 2-opt (×100)"
-    """Always use the requested worker count (default 4) unless --sequential."""
+
+
+def resolve_workers(requested: int, sequential: bool) -> int:
+    """Always use the requested worker count unless --sequential."""
     if sequential:
         return 1
     env_workers = os.environ.get("TSP_WORKERS")
