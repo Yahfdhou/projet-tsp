@@ -19,7 +19,6 @@ services:
       - "20"
       - --workers
       - "2"
-      - --fresh
 
   comparison-quick:
     build: .

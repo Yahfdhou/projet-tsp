@@ -21,9 +21,12 @@ from tsp_sba.config import ExperimentConfig, SBAParams
 from tsp_sba.experiments.runner import (
     append_checkpoint_row,
     completed_task_keys,
+    find_best_partial_run,
     load_checkpoint_rows,
     run_instance_algorithm,
     save_experiment_results,
+    write_active_experiment,
+    write_checkpoint_state,
 )
 
 
@@ -52,14 +55,22 @@ def resolve_workers(requested: int, sequential: bool) -> int:
     return max(1, requested)
 
 
-def find_latest_partial_run(results_dir: Path, expected_tasks: int) -> Path | None:
-    """Find the most recent experiment folder that is not finished yet."""
-    candidates = sorted(results_dir.glob("experiment_*"), reverse=True)
-    for run_dir in candidates:
-        rows = load_checkpoint_rows(run_dir)
-        if 0 < len(rows) < expected_tasks:
-            return run_dir
-    return None
+def print_resume_status(existing_rows: list[dict], total_tasks: int, run_dir: Path) -> None:
+    """Show where the experiment stopped (for user after server reboot)."""
+    n = len(existing_rows)
+    print(f"Resuming experiment: {run_dir}", flush=True)
+    print(f"  Already saved: {n}/{total_tasks} runs", flush=True)
+    if not existing_rows:
+        return
+    last = existing_rows[-1]
+    print(
+        f"  Last completed: {last['algorithm']}/{last['instance']} "
+        f"run {int(last['run_id']) + 1} cost={float(last['best_cost']):.2f}",
+        flush=True,
+    )
+    state_path = run_dir / "checkpoint_state.json"
+    if state_path.exists():
+        print(f"  Checkpoint file: {state_path}", flush=True)
 
 
 def main() -> None:
@@ -170,21 +181,24 @@ def main() -> None:
     elif args.fresh:
         run_dir = None
     else:
-        run_dir = find_latest_partial_run(results_dir, total_tasks)
+        run_dir = find_best_partial_run(results_dir, total_tasks)
 
     if run_dir is None:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         run_dir = results_dir / f"experiment_{timestamp}"
         run_dir.mkdir(parents=True, exist_ok=True)
+        write_active_experiment(results_dir, run_dir)
         existing_rows: list[dict] = []
+        print(f"New experiment: {run_dir}", flush=True)
     else:
         existing_rows = load_checkpoint_rows(run_dir)
-        print(f"Resuming experiment: {run_dir} ({len(existing_rows)}/{total_tasks} done)", flush=True)
+        write_active_experiment(results_dir, run_dir)
+        print_resume_status(existing_rows, total_tasks, run_dir)
 
     completed = completed_task_keys(existing_rows)
 
     print("=" * 60, flush=True)
-    print("TSP-SBA Experiment (Multi-Core v5 — reduced decades for TSP)", flush=True)
+    print("TSP-SBA Experiment (Multi-Core v6 — auto-resume)", flush=True)
     print(f"  main pid: {os.getpid()}", flush=True)
     print(f"  os.cpu_count(): {os.cpu_count()}", flush=True)
     print(f"  parallel workers: {workers}", flush=True)
@@ -279,8 +293,15 @@ def main() -> None:
                 append_checkpoint_row(run_dir, row)
                 all_rows.append(row)
                 done += 1
+                write_checkpoint_state(run_dir, all_rows, total_tasks)
                 if done % workers == 0 or done == total_tasks:
                     print(f"Progress: {done}/{total_tasks} runs saved", flush=True)
+                    last = row
+                    print(
+                        f"  Last: {last['algorithm']}/{last['instance']} "
+                        f"run {int(last['run_id']) + 1} cost={float(last['best_cost']):.2f}",
+                        flush=True,
+                    )
 
     summary_df, wilcoxon_df = save_experiment_results(
         all_rows, config, args.quick, run_dir, parallel_workers=workers

@@ -130,12 +130,75 @@ def run_instance_algorithm(
 
 
 def load_checkpoint_rows(run_dir: Path) -> list[dict]:
-    """Load rows already saved in a partial experiment."""
+    """Load rows already saved in a partial experiment (deduplicated)."""
     path = run_dir / "raw_results.csv"
     if not path.exists():
         return []
     df = pd.read_csv(path)
+    df = df.drop_duplicates(subset=["instance", "algorithm", "run_id"], keep="last")
+    df = df.sort_values(["instance", "algorithm", "run_id"]).reset_index(drop=True)
     return df.to_dict("records")
+
+
+def write_checkpoint_state(run_dir: Path, rows: list[dict], total_tasks: int) -> None:
+    """Persist human-readable progress for resume after server restart."""
+    if not rows:
+        return
+    last = rows[-1]
+    state = {
+        "completed": len(rows),
+        "total": total_tasks,
+        "remaining": total_tasks - len(rows),
+        "last_completed": {
+            "instance": str(last["instance"]),
+            "algorithm": str(last["algorithm"]),
+            "run_id": int(last["run_id"]),
+            "run_number": int(last["run_id"]) + 1,
+            "best_cost": float(last["best_cost"]),
+        },
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    (run_dir / "checkpoint_state.json").write_text(
+        json.dumps(state, indent=2), encoding="utf-8"
+    )
+
+
+def write_active_experiment(results_dir: Path, run_dir: Path) -> None:
+    """Remember which experiment folder to resume after container restart."""
+    results_dir.mkdir(parents=True, exist_ok=True)
+    (results_dir / "active_experiment.txt").write_text(
+        run_dir.name + "\n", encoding="utf-8"
+    )
+
+
+def read_active_experiment(results_dir: Path) -> Path | None:
+    marker = results_dir / "active_experiment.txt"
+    if not marker.exists():
+        return None
+    name = marker.read_text(encoding="utf-8").strip()
+    if not name:
+        return None
+    path = results_dir / name
+    return path if path.exists() else None
+
+
+def find_best_partial_run(results_dir: Path, expected_tasks: int) -> Path | None:
+    """Find the experiment with the most saved runs (resume after crash/reboot)."""
+    active = read_active_experiment(results_dir)
+    if active is not None:
+        rows = load_checkpoint_rows(active)
+        if 0 < len(rows) < expected_tasks:
+            return active
+
+    best_dir: Path | None = None
+    best_count = 0
+    for run_dir in results_dir.glob("experiment_*"):
+        rows = load_checkpoint_rows(run_dir)
+        n = len(rows)
+        if 0 < n < expected_tasks and n > best_count:
+            best_count = n
+            best_dir = run_dir
+    return best_dir
 
 
 def completed_task_keys(rows: list[dict]) -> set[tuple[str, str, int]]:
@@ -146,9 +209,14 @@ def completed_task_keys(rows: list[dict]) -> set[tuple[str, str, int]]:
 
 
 def append_checkpoint_row(run_dir: Path, row: dict) -> None:
-    """Append one finished run to raw_results.csv (safe for long parallel jobs)."""
+    """Append one finished run to raw_results.csv (skip if already saved)."""
     run_dir.mkdir(parents=True, exist_ok=True)
     path = run_dir / "raw_results.csv"
+    key = (str(row["instance"]), str(row["algorithm"]), int(row["run_id"]))
+    if path.exists():
+        existing = load_checkpoint_rows(run_dir)
+        if key in completed_task_keys(existing):
+            return
     df = pd.DataFrame([row])
     if path.exists():
         df.to_csv(path, mode="a", header=False, index=False)

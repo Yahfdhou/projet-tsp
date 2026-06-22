@@ -60,10 +60,13 @@ sudo docker run -d \
     --runs 30 \
     --instances berlin52 eil51 kroA100 \
     --decades-multiplier "$DECADES_MULTIPLIER" \
-    --workers "$WORKERS" \
-    --fresh
+    --workers "$WORKERS"
 
 echo ""
+echo "=== Auto-resume enabled ==="
+echo "  After server reboot, same container restarts and continues from last saved run."
+echo "  Check progress: cat $PROJECT_DIR/results/active_experiment.txt"
+echo "  Check last run:   cat $PROJECT_DIR/results/experiment_*/checkpoint_state.json"
 echo "=== Done! $WORKERS workers on $WORKERS vCPUs ==="
 echo ""
 echo "Follow logs:"
